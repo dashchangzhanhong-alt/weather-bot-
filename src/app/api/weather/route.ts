@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   const lat = searchParams.get('lat') || '3.1390';
   const lon = searchParams.get('lon') || '101.6869';
 
+  // Environment variables with hardcoded fallbacks
   const weatherApiKey =
     process.env.OPENWEATHER_API_KEY || 'b52a19c344c113f519e14c88f759332a';
 
@@ -15,13 +16,20 @@ export async function GET(request: Request) {
     process.env.ASTRONOMY_APP_SECRET || '0e55f390003af81264f23feba597e515d27db79a4c53dcaf28';
 
   try {
-    // 1. Fetch OpenWeather Data
+    // 1. Fetch OpenWeather Current Weather Data
     const weatherRes = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${weatherApiKey}`
     );
     const weatherData = await weatherRes.json();
 
-    // 2. Fetch Reverse Geocoding
+    if (!weatherRes.ok) {
+      return NextResponse.json(
+        { error: `OpenWeather API error: ${weatherData.message}` },
+        { status: weatherRes.status }
+      );
+    }
+
+    // 2. Fetch Reverse Geocoding for City/State
     let cityName = weatherData.name || 'Kuala Lumpur';
     try {
       const geoRes = await fetch(
@@ -37,7 +45,7 @@ export async function GET(request: Request) {
       console.error('Geo lookup error:', e);
     }
 
-    // 3. Fetch Dynamic Star Chart with Debugging Output
+    // 3. Fetch Dynamic Star Chart (Includes Origin Header Fix)
     let starChartUrl = null;
     let astroDebug = null;
 
@@ -51,6 +59,7 @@ export async function GET(request: Request) {
           headers: {
             'Authorization': authHeader,
             'Content-Type': 'application/json',
+            'Origin': 'https://weather-bot.dashchangzhanhong.workers.dev',
           },
           body: JSON.stringify({
             style: 'navy',
