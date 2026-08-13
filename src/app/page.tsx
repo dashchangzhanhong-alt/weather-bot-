@@ -1,135 +1,109 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Thermometer, Compass, Eye, Sparkles, MapPin } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && navigator.geolocation) {
+    async function fetchLiveData(lat?: number, lon?: number) {
+      setLoading(true);
+      const query = lat && lon ? `?lat=${lat}&lon=${lon}` : '';
+      try {
+        const res = await fetch(`/api/weather${query}`);
+        const result = await res.json();
+        setData(result);
+      } catch (err) {
+        console.error('Failed to fetch weather', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // Request live browser location
+    if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => fetchWeatherData(pos.coords.latitude, pos.coords.longitude),
-        () => fetchWeatherData(37.7749, -122.4194)
+        (position) => {
+          fetchLiveData(position.coords.latitude, position.coords.longitude);
+        },
+        () => {
+          // Fallback if user denies location permission
+          fetchLiveData();
+        }
       );
     } else {
-      fetchWeatherData(37.7749, -122.4194);
+      fetchLiveData();
     }
   }, []);
 
-  const fetchWeatherData = async (lat: number, lon: number) => {
-    try {
-      const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
-      const json = await res.json();
-      setData(json);
-    } catch (err) {
-      console.error('Error loading weather data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white font-sans">
-        <div className="text-center space-y-3">
-          <Sparkles className="w-8 h-8 animate-spin mx-auto text-blue-400" />
-          <p className="text-lg font-light tracking-wide">
-            Detecting Location and Sky Conditions...
-          </p>
-        </div>
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <p className="text-xl animate-pulse">Capturing live location & star chart...</p>
       </div>
     );
   }
 
-  const weather = data?.weather;
-  const temp = Math.round(Number(weather?.main?.temp) || 0);
-  const feelsLike = Math.round(Number(weather?.main?.feels_like) || 0);
-  const tempMax = Math.round(Number(weather?.main?.temp_max) || 0);
-  const tempMin = Math.round(Number(weather?.main?.temp_min) || 0);
-  const humidity = Number(weather?.main?.humidity) || 0;
-  const windSpeed = Number(weather?.wind?.speed) || 0;
-  const windDeg = Number(weather?.wind?.deg) || 0;
-  const visibilityKm = weather?.visibility ? (Number(weather.visibility) / 1000).toFixed(1) : '10';
-  const locationName = String(weather?.name || 'Overhead Sky');
-  const description = String(weather?.weather?.[0]?.description || 'Clear Sky');
+  const temp = Math.round(data?.weather?.main?.temp ?? 0);
+  const feelsLike = Math.round(data?.weather?.main?.feels_like ?? 0);
+  const description = data?.weather?.weather?.[0]?.description ?? '';
+  const windSpeed = data?.weather?.wind?.speed ?? 0;
+  const windDeg = data?.weather?.wind?.deg ?? 0;
+  const humidity = data?.weather?.main?.humidity ?? 0;
+  const visibility = ((data?.weather?.visibility ?? 0) / 1000).toFixed(1);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-sky-600 via-indigo-900 to-slate-950 text-white p-6 md:p-12 font-sans">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <main className="min-h-screen bg-gradient-to-b from-blue-900 via-slate-900 to-black text-white p-6 md:p-12">
+      <div className="max-w-4xl mx-auto space-y-8">
         
-        {/* Main Header */}
-        <header className="text-center py-6">
-          <div className="flex items-center justify-center gap-2 text-blue-200 mb-1">
-            <MapPin className="w-4 h-4" />
-            <h1 className="text-3xl font-light tracking-wide">{locationName}</h1>
-          </div>
-          <p className="text-8xl font-extralight tracking-tighter my-2">
-            {temp}°
+        {/* Header Location & Main Temp */}
+        <div className="text-center space-y-2">
+          <p className="text-xl md:text-2xl font-light text-blue-200">
+            📍 {data?.location || 'Live Location'}
           </p>
-          <p className="text-lg font-medium capitalize text-blue-200">
-            {description}
-          </p>
-          <div className="flex justify-center gap-4 text-sm mt-2 text-blue-100 font-light">
-            <span>H: {tempMax}°</span>
-            <span>L: {tempMin}°</span>
-          </div>
-        </header>
+          <h1 className="text-7xl md:text-8xl font-bold">{temp}°</h1>
+          <p className="text-lg md:text-xl capitalize text-slate-300">{description}</p>
+        </div>
 
-        {/* Weather Cards */}
+        {/* Weather Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-5 flex flex-col justify-between shadow-lg">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-blue-200 font-semibold">
-              <Thermometer className="w-4 h-4" /> Feels Like
-            </div>
-            <p className="text-4xl font-light my-4">{feelsLike}°</p>
-            <p className="text-xs text-blue-100">Humidity: {humidity}%</p>
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+            <p className="text-sm text-slate-400 font-medium">FEELS LIKE</p>
+            <p className="text-3xl font-semibold mt-2">{feelsLike}°</p>
+            <p className="text-xs text-slate-400 mt-1">Humidity: {humidity}%</p>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-5 flex flex-col justify-between shadow-lg">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-blue-200 font-semibold">
-              <Compass className="w-4 h-4" /> Wind
-            </div>
-            <p className="text-4xl font-light my-4">
-              {windSpeed} <span className="text-base font-normal">m/s</span>
-            </p>
-            <p className="text-xs text-blue-100">Direction: {windDeg}°</p>
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+            <p className="text-sm text-slate-400 font-medium">WIND</p>
+            <p className="text-3xl font-semibold mt-2">{windSpeed} <span className="text-base font-normal">m/s</span></p>
+            <p className="text-xs text-slate-400 mt-1">Direction: {windDeg}°</p>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-5 flex flex-col justify-between shadow-lg">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-blue-200 font-semibold">
-              <Eye className="w-4 h-4" /> Visibility
-            </div>
-            <p className="text-4xl font-light my-4">
-              {visibilityKm} <span className="text-base font-normal">km</span>
-            </p>
-            <p className="text-xs text-blue-100">Atmospheric clarity</p>
+          <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+            <p className="text-sm text-slate-400 font-medium">VISIBILITY</p>
+            <p className="text-3xl font-semibold mt-2">{visibility} <span className="text-base font-normal">km</span></p>
+            <p className="text-xs text-slate-400 mt-1">Atmospheric clarity</p>
           </div>
         </div>
 
-        {/* Constellation Card */}
-        <section className="bg-white/10 backdrop-blur-xl rounded-3xl border border-white/20 p-6 shadow-xl">
-          <h2 className="text-xl font-light mb-4 flex items-center gap-2 text-blue-100">
-            <Sparkles className="w-5 h-5 text-yellow-300" /> Overhead Constellation and Star Chart
+        {/* Live Overhead Star Chart */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 space-y-4">
+          <h2 className="text-lg font-medium text-blue-200 flex items-center gap-2">
+            ✨ Live Overhead Constellation and Star Chart
           </h2>
-          {data?.astronomy?.imageUrl ? (
-            <div className="relative w-full h-80 overflow-hidden rounded-2xl border border-white/10 shadow-inner bg-slate-950">
-              <img 
-                src={data.astronomy.imageUrl} 
-                alt="Current Zenith Constellation Map" 
-                className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-500"
-              />
-            </div>
+          {data?.starChartUrl ? (
+            <img
+              src={data.starChartUrl}
+              alt="Live Zenith Constellation Map"
+              className="w-full h-auto rounded-xl shadow-2xl border border-white/10 object-cover"
+            />
           ) : (
-            <div className="h-64 bg-slate-900/60 rounded-2xl flex flex-col items-center justify-center text-center p-6 border border-white/10">
-              <p className="text-sm text-slate-300 font-medium mb-1">Live Sky Chart Ready</p>
-              <p className="text-xs text-slate-400 max-w-md">
-                Add your API credentials in .env.local to render the live overhead star map.
-              </p>
+            <div className="w-full h-64 bg-slate-950/60 rounded-xl flex items-center justify-center text-slate-400 text-sm">
+              Generating live overhead star chart...
             </div>
           )}
-        </section>
+        </div>
 
       </div>
     </main>
