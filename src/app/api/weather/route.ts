@@ -5,7 +5,6 @@ export async function GET(request: Request) {
   const lat = searchParams.get('lat') || '3.1390';
   const lon = searchParams.get('lon') || '101.6869';
 
-  // Read environment variables with hardcoded fallbacks for Cloudflare Edge
   const weatherApiKey =
     process.env.OPENWEATHER_API_KEY || 'b52a19c344c113f519e14c88f759332a';
 
@@ -22,14 +21,7 @@ export async function GET(request: Request) {
     );
     const weatherData = await weatherRes.json();
 
-    if (!weatherRes.ok) {
-      return NextResponse.json(
-        { error: `OpenWeather error: ${weatherData.message}` },
-        { status: weatherRes.status }
-      );
-    }
-
-    // 2. Fetch Reverse Geocoding for City/State
+    // 2. Fetch Reverse Geocoding
     let cityName = weatherData.name || 'Kuala Lumpur';
     try {
       const geoRes = await fetch(
@@ -45,11 +37,13 @@ export async function GET(request: Request) {
       console.error('Geo lookup error:', e);
     }
 
-    // 3. Fetch Dynamic Star Chart
+    // 3. Fetch Dynamic Star Chart with Debugging Output
     let starChartUrl = null;
+    let astroDebug = null;
+
     if (astronomyAppId && astronomySecret) {
       try {
-        const authHeader = `Basic ${btoa(`${astronomyAppId}:${astronomySecret}`)}`;
+        const authHeader = `Basic ${btoa(`${astronomyAppId.trim()}:${astronomySecret.trim()}`)}`;
         const currentDate = new Date().toISOString().split('T')[0];
 
         const astroRes = await fetch('https://api.astronomyapi.com/api/v2/studio/star-chart', {
@@ -80,12 +74,15 @@ export async function GET(request: Request) {
           }),
         });
 
+        const astroData = await astroRes.json();
+
         if (astroRes.ok) {
-          const astroData = await astroRes.json();
           starChartUrl = astroData?.data?.imageUrl || null;
+        } else {
+          astroDebug = { status: astroRes.status, response: astroData };
         }
-      } catch (e) {
-        console.error('Astronomy API error:', e);
+      } catch (e: any) {
+        astroDebug = { error: e.message };
       }
     }
 
@@ -93,6 +90,7 @@ export async function GET(request: Request) {
       location: cityName,
       weather: weatherData,
       starChartUrl: starChartUrl,
+      astroDebug: astroDebug,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
