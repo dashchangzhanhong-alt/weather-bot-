@@ -1,57 +1,55 @@
 import { NextResponse } from 'next/server';
-import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const lat = searchParams.get('lat') || '3.1390';
   const lon = searchParams.get('lon') || '101.6869';
 
-  // 1. Primary lookup: process.env or direct key fallback
-  let weatherApiKey =
-    process.env.OPENWEATHER_API_KEY ||
-    process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY ||
-    'b52a19c344c113f519e14c88f759332a';
+  // Read environment variables with hardcoded fallbacks for Cloudflare Edge
+  const weatherApiKey =
+    process.env.OPENWEATHER_API_KEY || 'b52a19c344c113f519e14c88f759332a';
 
-  let astronomyAppId =
-    process.env.ASTRONOMY_APP_ID ||
-    '6856ea4a-0a98-4738-8106-1aaf19d0a319';
+  const astronomyAppId =
+    process.env.ASTRONOMY_APP_ID || '6856ea4a-0a98-4738-8106-1aaf19d0a319';
 
-  let astronomySecret =
-    process.env.ASTRONOMY_APP_SECRET ||
-    '0e55f390003af81264f23feba597e515d27db79a4c53dcaf28';
-
-  // 2. Cloudflare runtime context lookup
-  try {
-    const { env } = await getCloudflareContext();
-    if (env) {
-      const cfEnv = env as Record<string, string>;
-      if (cfEnv.OPENWEATHER_API_KEY) weatherApiKey = cfEnv.OPENWEATHER_API_KEY;
-      if (cfEnv.ASTRONOMY_APP_ID) astronomyAppId = cfEnv.ASTRONOMY_APP_ID;
-      if (cfEnv.ASTRONOMY_APP_SECRET) astronomySecret = cfEnv.ASTRONOMY_APP_SECRET;
-    }
-  } catch (e) {
-    console.warn('Cloudflare context fallback:', e);
-  }
+  const astronomySecret =
+    process.env.ASTRONOMY_APP_SECRET || '0e55f390003af81264f23feba597e515d27db79a4c53dcaf28';
 
   try {
-    // Fetch OpenWeather Data
+    // 1. Fetch OpenWeather Data
     const weatherRes = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${weatherApiKey.trim()}`
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${weatherApiKey}`
     );
     const weatherData = await weatherRes.json();
 
     if (!weatherRes.ok) {
       return NextResponse.json(
-        { error: `OpenWeather API error: ${weatherData.message}` },
+        { error: `OpenWeather error: ${weatherData.message}` },
         { status: weatherRes.status }
       );
     }
 
-    // Fetch Star Chart
+    // 2. Fetch Reverse Geocoding for City/State
+    let cityName = weatherData.name || 'Kuala Lumpur';
+    try {
+      const geoRes = await fetch(
+        `https://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${weatherApiKey}`
+      );
+      if (geoRes.ok) {
+        const geoData = await geoRes.json();
+        if (geoData && geoData.length > 0) {
+          cityName = geoData[0].state || geoData[0].name || weatherData.name;
+        }
+      }
+    } catch (e) {
+      console.error('Geo lookup error:', e);
+    }
+
+    // 3. Fetch Dynamic Star Chart
     let starChartUrl = null;
     if (astronomyAppId && astronomySecret) {
       try {
-        const authHeader = `Basic ${btoa(`${astronomyAppId.trim()}:${astronomySecret.trim()}`)}`;
+        const authHeader = `Basic ${btoa(`${astronomyAppId}:${astronomySecret}`)}`;
         const currentDate = new Date().toISOString().split('T')[0];
 
         const astroRes = await fetch('https://api.astronomyapi.com/api/v2/studio/star-chart', {
@@ -87,12 +85,12 @@ export async function GET(request: Request) {
           starChartUrl = astroData?.data?.imageUrl || null;
         }
       } catch (e) {
-        console.error('Astronomy API fetch failed:', e);
+        console.error('Astronomy API error:', e);
       }
     }
 
     return NextResponse.json({
-      location: weatherData.name || 'Kuala Lumpur',
+      location: cityName,
       weather: weatherData,
       starChartUrl: starChartUrl,
     });
